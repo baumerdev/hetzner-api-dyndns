@@ -2,6 +2,8 @@
 
 A small script to dynamically update DNS records using the Hetzner DNS-API. Feel free to propose changes.
 
+> This fork contains some pull requests that have not been merged into the original repository and it builds a docker image to run the script.
+
 **Hetzner DNS API Doc:**
 
 https://dns.hetzner.com/api-docs/
