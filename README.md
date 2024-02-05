@@ -17,6 +17,7 @@ https://dns.hetzner.com/api-docs/
 ## Install tools
 
 - [`curl`](https://curl.se/)
+- `dig`
 - [`jq`](https://stedolan.github.io/jq/): [install](https://stedolan.github.io/jq/download/)
 
 ## Generate Access Token
