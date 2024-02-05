@@ -34,7 +34,7 @@ auth_api_token=${HETZNER_AUTH_API_TOKEN:-'<your-hetzner-dns-api-token>'}
 
 As soon as the token is deposited, the script can be called with the appropriate parameters. This allows several DynDNS records to be created in different zones. Optionally, the TTL and the record type can be specified. It is advisable to keep the TTL as low as possible, so that changed records are used as soon as possible.
 ```
-./dyndns.sh [ -z <Zone ID> | -Z <zone_name> ] [-r <Record ID>] -n <Record Name> [-t <TTL>] [-T <Record Type>]
+./dyndns.sh -Z <Zone Name> -n <Record Name> [ -z Zone ID ] [ -r <Record ID> ] [-t <TTL>] [-T <Record Type>] [-N <Nameserver>]
 ```
 
 To keep your DynDNS Records up to date, you have to create a cronjob that calls the script periodically. 
@@ -70,6 +70,7 @@ You can use the following enviroment variables.
 |HETZNER_RECORD_NAME    | dyn                              | The record name. '@' to set the record for the zone itself.     |
 |HETZNER_RECORD_TTL     | 120                              | The TTL of the record. Default(60)                              |
 |HETZNER_RECORD_TYPE    | AAAA                             | The record type. Either A for IPv4 or AAAA for IPv6. Default(A) |
+|HETZNER_NAMESERVER     | hydrogen.ns.hetzner.com          | Nameserver for checking if anything is up-to-date. Default(oxygen.ns.hetzner.com) |
 
 # Help
 Type `-h` to display help page.
@@ -77,24 +78,30 @@ Type `-h` to display help page.
 ./dyndns.sh -h
 ```
 ```
-exec: ./dyndns.sh -Z <Zone Name> -n <Record Name>
+exec: ./dyndns.sh -Z <Zone Name> -n <Record Name> [ -z Zone ID ] [ -r <Record ID> ] [-t <TTL>] [-T <Record Type>] [-N <Nameserver>]
 
 parameters:
-  -z  - Zone ID
-  -Z  - Zone Name
-  -r  - Record ID
+  -Z  - Zone name
   -n  - Record name
 
 optional parameters:
+  -z  - Zone ID
+  -r  - Record ID
   -t  - TTL (Default: 60)
   -T  - Record type (Default: A)
+  -N  - Nameserver for check (Default: oxygen.ns.hetzner.com)
 
 help:
   -h  - Show Help 
 
+requirements:
+  curl
+  dig
+  jq
+
 example:
-  .exec: ./dyndns.sh -Z example.com -n dyn -T AAAA
   .exec: ./dyndns.sh -z 98jFjsd8dh1GHasdf7a8hJG7 -r AHD82h347fGAF1 -n dyn
+  .exec: ./dyndns.sh -Z example.com -n dyn -T AAAA
 
 ``` 
 # Additional stuff

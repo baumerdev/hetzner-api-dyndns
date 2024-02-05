@@ -18,7 +18,7 @@ nameserver=${HETZNER_NAMESERVER:-'oxygen.ns.hetzner.com'}
 display_help() {
   cat <<EOF
 
-exec: ./dyndns.sh -Z <Zone Name> -n <Record Name> [ -z Zone ID ] [ -r <Record ID> ]
+exec: ./dyndns.sh -Z <Zone Name> -n <Record Name> [ -z Zone ID ] [ -r <Record ID> ] [-t <TTL>] [-T <Record Type>] [-N <Nameserver>]
 
 parameters:
   -Z  - Zone name
