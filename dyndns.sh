@@ -48,8 +48,10 @@ EOF
 }
 
 logger() {
-  echo ${1}: Record_Name: ${record_name} : ${2}
+  timestamp=`date "+%Y-%m-%d %H:%M:%S"`
+  echo "${timestamp}  [${1}]  ${record_name}.${zone_name}  ${2}"
 }
+
 while getopts ":z:Z:r:n:t:T:N:h" opt; do
   case "$opt" in
     z  ) zone_id="${OPTARG}";;
@@ -130,7 +132,6 @@ elif [[ "${record_type}" = "A" ]]; then
   else
     logger Info "Outdated IP address in nameserver: ${cur_ns_addr}"
   fi
-  exit 0;
 else 
   logger Error "Only record type \"A\" or \"AAAA\" are support for DynDNS."
   exit 1
