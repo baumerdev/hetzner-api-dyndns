@@ -8,30 +8,35 @@ auth_api_token=${HETZNER_AUTH_API_TOKEN:-''}
 zone_name=${HETZNER_ZONE_NAME:-''}
 zone_id=${HETZNER_ZONE_ID:-''}
 
+record_id=${HETZNER_RECORD_ID:-''}
 record_name=${HETZNER_RECORD_NAME:-''}
 record_ttl=${HETZNER_RECORD_TTL:-'60'}
 record_type=${HETZNER_RECORD_TYPE:-'A'}
 
+nameserver=${HETZNER_NAMESERVER:-'oxygen.ns.hetzner.com'}
+
 display_help() {
   cat <<EOF
 
-exec: ./dyndns.sh [ -z <Zone ID> | -Z <Zone Name> ] -r <Record ID> -n <Record Name>
+exec: ./dyndns.sh -Z <Zone Name> -n <Record Name> [ -z Zone ID ] [ -r <Record ID> ]
 
 parameters:
-  -z  - Zone ID
   -Z  - Zone name
-  -r  - Record ID
   -n  - Record name
 
 optional parameters:
+  -z  - Zone ID
+  -r  - Record ID
   -t  - TTL (Default: 60)
   -T  - Record type (Default: A)
+  -N  - Nameserver for check (Default: oxygen.ns.hetzner.com)
 
 help:
   -h  - Show Help 
 
 requirements:
   curl
+  dig
   jq
 
 example:
@@ -45,7 +50,7 @@ EOF
 logger() {
   echo ${1}: Record_Name: ${record_name} : ${2}
 }
-while getopts ":z:Z:r:n:t:T:h" opt; do
+while getopts ":z:Z:r:n:t:T:N:h" opt; do
   case "$opt" in
     z  ) zone_id="${OPTARG}";;
     Z  ) zone_name="${OPTARG}";;
@@ -53,6 +58,7 @@ while getopts ":z:Z:r:n:t:T:h" opt; do
     n  ) record_name="${OPTARG}";;
     t  ) record_ttl="${OPTARG}";;
     T  ) record_type="${OPTARG}";;
+    N  ) nameserver="${OPTARG}";;
     h  ) display_help;;
     \? ) echo "Invalid option: -$OPTARG" >&2; exit 1;;
     :  ) echo "Missing option argument for -$OPTARG" >&2; exit 1;;
@@ -61,7 +67,7 @@ while getopts ":z:Z:r:n:t:T:h" opt; do
 done
 
 # Check if tools are installed
-for cmd in curl jq; do
+for cmd in curl dig jq; do
   if ! command -v "${cmd}" &> /dev/null; then
     logger Error "To run the script '${cmd}' is needed, but it seems not to be installed."
     logger Error "Please check 'https://github.com/FarrowStrange/hetzner-api-dyndns#install-tools' for more informations and try again."
@@ -72,6 +78,61 @@ done
 # Check if api token is set 
 if [[ "${auth_api_token}" = "" ]]; then
   logger Error "No Auth API Token specified."
+  exit 1
+fi
+
+# Check if zone id or zone name is set 
+if [[ "${zone_name}" = "" ]]; then
+  logger Error "Missing option for record name: -Z <Zone Name>"
+  logger Error "Use -h to display help."
+  exit 1
+fi
+
+# Check if record name is set 
+if [[ "${record_name}" = "" ]]; then
+  logger Error "Missing option for record name: -n <Record Name>"
+  logger Error "Use -h to display help."
+  exit 1
+fi
+
+# get current public ip address and ip from nameserver
+if [[ "${record_type}" = "AAAA" ]]; then
+  logger Info "Using IPv6, because AAAA was set as record type."
+  cur_pub_addr=$(curl -s6 https://ip.hetzner.com | grep -E '^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}$')
+  if [[ "${cur_pub_addr}" = "" ]]; then
+    logger Error "It seems you don't have a IPv6 public address."
+    exit 1
+  else
+    logger Info "Current public IP address: ${cur_pub_addr}"
+  fi
+
+  cur_ns_addr=$(dig +short @${nameserver} ${record_name}.${zone_name} ${record_type} | grep -E '^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}$')
+  if [[ "${cur_ns_addr}" = "${cur_pub_addr}" ]]; then
+    logger Info "DNS record \"${record_name}\" is up to date - nothing to do."
+    exit 0
+  else
+    logger Info "Outdated IP address in nameserver: ${cur_ns_addr}"
+  fi
+elif [[ "${record_type}" = "A" ]]; then
+  logger Info "Using IPv4, because A was set as record type."
+  cur_pub_addr=$(curl -s4 https://ip.hetzner.com | grep -E '^([0-9]+(\.|$)){4}')
+  if [[ "${cur_pub_addr}" = "" ]]; then
+    logger Error "Apparently there is a problem in determining the public ip address."
+    exit 1
+  else
+    logger Info "Current public IP address: ${cur_pub_addr}"
+  fi
+
+  cur_ns_addr=$(dig +short @${nameserver} ${record_name}.${zone_name} ${record_type} | grep -E '^([0-9]+(\.|$)){4}')
+  if [[ "${cur_ns_addr}" = "${cur_pub_addr}" ]]; then
+    logger Info "DNS record \"${record_name}\" is up to date - nothing to do."
+    exit 0
+  else
+    logger Info "Outdated IP address in nameserver: ${cur_ns_addr}"
+  fi
+  exit 0;
+else 
+  logger Error "Only record type \"A\" or \"AAAA\" are support for DynDNS."
   exit 1
 fi
 
@@ -88,48 +149,13 @@ if [[ "$(echo ${zone_info} | jq --raw-output '.zones[] | select(.name=="'${zone_
   exit 1
 fi
 
-# get zone_id if zone_name is given and in zones
+# get zone_id
 if [[ "${zone_id}" = "" ]]; then
   zone_id=$(echo ${zone_info} | jq --raw-output '.zones[] | select(.name=="'${zone_name}'") | .id')
 fi
 
-# get zone_name if zone_id is given and in zones
-if [[ "${zone_name}" = "" ]]; then
-  zone_name=$(echo ${zone_info} | jq --raw-output '.zones[] | select(.id=="'${zone_id}'") | .name')
-fi
-
 logger Info "Zone_ID: ${zone_id}"
 logger Info "Zone_Name: ${zone_name}"
-
-if [[ "${record_name}" = "" ]]; then
-  logger Error "Mission option for record name: -n <Record Name>"
-  logger Error "Use -h to display help."
-  exit 1
-fi
-
-# get current public ip address
-if [[ "${record_type}" = "AAAA" ]]; then
-  logger Info "Using IPv6, because AAAA was set as record type."
-  cur_pub_addr=$(curl -s6 https://ip.hetzner.com | grep -E '^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}$')
-  if [[ "${cur_pub_addr}" = "" ]]; then
-    logger Error "It seems you don't have a IPv6 public address."
-    exit 1
-  else
-    logger Info "Current public IP address: ${cur_pub_addr}"
-  fi
-elif [[ "${record_type}" = "A" ]]; then
-  logger Info "Using IPv4, because A was set as record type."
-  cur_pub_addr=$(curl -s4 https://ip.hetzner.com | grep -E '^([0-9]+(\.|$)){4}')
-  if [[ "${cur_pub_addr}" = "" ]]; then
-    logger Error "Apparently there is a problem in determining the public ip address."
-    exit 1
-  else
-    logger Info "Current public IP address: ${cur_pub_addr}"
-  fi
-else 
-  logger Error "Only record type \"A\" or \"AAAA\" are support for DynDNS."
-  exit 1
-fi
 
 # get record id if not given as parameter
 if [[ "${record_id}" = "" ]]; then
