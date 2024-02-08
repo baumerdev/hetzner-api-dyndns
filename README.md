@@ -1,136 +1,100 @@
-# Hetzner API DynDNS
+# Hetzner DynDNS Docker
 
-A small script to dynamically update DNS records using the Hetzner DNS-API. Feel free to propose changes.
+A small Docker image to dynamically update DNS records using the [Hetzner DNS-API](https://www.hetzner.com/dns-console/).
 
-**Differences to the original repository:**
-  * This fork contains some pull requests that have not been merged into the original repository.
-  * Some parameter are now mandatory.
-  * It compares the current IP with the IP of the DNS record before calling the API.
-  * This fork builds a docker image to run the script.
+It's just a single bash script, running on Alpine and using only curl, dig and jq. It will update (or create) a DNS record in a zone to the current public IP address.
+
+## Installation
+
+### Generate Access Token
+
+First, a new access token must be created in the [Hetzner DNS Console](https://dns.hetzner.com/). This should be copied immediately, because for security reasons it will not be possible to display the token later.
 
 **Hetzner DNS API Doc:**
 
 https://dns.hetzner.com/api-docs/
 
-# Preparations
+### Usage
 
-## Install tools
+This quick set up will start the container and update the DNS record every 5 minutes.
 
-- [`curl`](https://curl.se/)
-- `dig`
-- [`jq`](https://stedolan.github.io/jq/): [install](https://stedolan.github.io/jq/download/)
-
-## Generate Access Token
-First, a new access token must be created in the [Hetzner DNS Console](https://dns.hetzner.com/). This should be copied immediately, because for security reasons it will not be possible to display the token later. But you can generate as many tokens as you like.
-
-# Usage
-You store your Access Token either in the script or set it as an OS environment variable. To store it in the script replace `<your-hetzner-dns-api-token>` in the following line in the script.
-
-```
-...
-auth_api_token=${HETZNER_AUTH_API_TOKEN:-'<your-hetzner-dns-api-token>'}
-...
+```bash
+docker run \
+-e HETZNER_AUTH_API_TOKEN=<your-hetzner-dns-api-token> \
+-e HETZNER_ZONE_NAME=<your-zone> \
+-e HETZNER_RECORD_NAME=<your-record> \
+--restart=always \
+baumerdev/hetzner-dyndns:latest
 ```
 
-As soon as the token is deposited, the script can be called with the appropriate parameters. This allows several DynDNS records to be created in different zones. Optionally, the TTL and the record type can be specified. It is advisable to keep the TTL as low as possible, so that changed records are used as soon as possible.
+## Configuration
+
+### Environment Variables
+
+|NAME                       | Required | Default               | Description                                                                        |
+|:--------------------------|:---------|:----------------------|:-----------------------------------------------------------------------------------|
+|**HETZNER_AUTH_API_TOKEN** | ✔        |                       | Your Hetzner API access token                                                      |
+|**HETZNER_ZONE_NAME**      | ✔        |                       | The zone name a.k.a the domain name.                                               |
+|**HETZNER_RECORD_NAME**    | ✔        |                       | The record name a.k.a the subdomain. '@' to set the record for the zone itself.    |
+|HETZNER_ZONE_ID            |          |                       | The zone ID to update. If not provided, the script will get the ID from the API.   |
+|HETZNER_RECORD_ID          |          |                       | The record ID to update. If not provided, the script will get the ID from the API. |
+|HETZNER_RECORD_TTL         |          | 60                    | The TTL of the record.                                                             |
+|HETZNER_RECORD_TYPE        |          | A                     | The record type. Either A for IPv4 or AAAA for IPv6.                               |
+|HETZNER_NAMESERVER         |          | oxygen.ns.hetzner.com | Nameserver for checking if anything is up-to-date.                                 |
+|CRON                       |          | */5 * * * *           | Crontab time fields                                                                |
+
+**Note:** If the record does not exist, the script will create it. If you provide a zone ID and record ID they must match the zone and record name.
+
+### Getting zone ID and record ID
+
+Zone ID and record ID can be provided which will reduce the amount of API calls otherwise the script will get the IDs from the API.
+
+### Get all zones
+
+If you want to get all zones in your account and check the desired Zone ID.
+
 ```
-./dyndns.sh -Z <Zone Name> -n <Record Name> [ -z Zone ID ] [ -r <Record ID> ] [-t <TTL>] [-T <Record Type>] [-N <Nameserver>]
-```
-
-To keep your DynDNS Records up to date, you have to create a cronjob that calls the script periodically. 
-
-**Examples:**
-You have several possibilities to call the script. In these examples it is called periodically every 5 minutes and updates the DNS entry if necessary.
-
-In the first example only the API token is passed as environment variable and the remaining information as parameters. This allows for example to set multiple DynDNS entries in different zones when the script is called multiple times with different parameters.
-```
-HETZNER_AUTH_API_TOKEN='<your-hetzner-dns-api-token>'
-
-*/5 * * * * /usr/bin/dyndns.sh -Z example.com -n dyn
-```
-
-You can also pass all information as an environment variables to create a DynDNS entry.
-```
-HETZNER_AUTH_API_TOKEN='<your-hetzner-dns-api-token>'
-HETZNER_ZONE_NAME='example.com'
-HETZNER_RECORD_NAME='dyn'
-
-*/5 * * * * /usr/bin/dyndns.sh
-```
-
-# OS Environment Variables
-
-You can use the following enviroment variables.
-
-|NAME                   | Value                            | Description                                                     |
-|:----------------------|----------------------------------|:----------------------------------------------------------------|
-|HETZNER_AUTH_API_TOKEN | 925bf046408b55c313740eef2bc18b1e | Your Hetzner API access token                                   |
-|HETZNER_ZONE_NAME      | example.com                      | The zone name                                                   |
-|HETZNER_ZONE_ID        | DaGaoE6YzDTQHKxrtzfkTx           | The zone ID. Use either the zone name or the zone ID. Not both. |
-|HETZNER_RECORD_NAME    | dyn                              | The record name. '@' to set the record for the zone itself.     |
-|HETZNER_RECORD_TTL     | 120                              | The TTL of the record. Default(60)                              |
-|HETZNER_RECORD_TYPE    | AAAA                             | The record type. Either A for IPv4 or AAAA for IPv6. Default(A) |
-|HETZNER_NAMESERVER     | hydrogen.ns.hetzner.com          | Nameserver for checking if anything is up-to-date. Default(oxygen.ns.hetzner.com) |
-
-# Help
-Type `-h` to display help page.
-```
-./dyndns.sh -h
-```
-```
-exec: ./dyndns.sh -Z <Zone Name> -n <Record Name> [ -z Zone ID ] [ -r <Record ID> ] [-t <TTL>] [-T <Record Type>] [-N <Nameserver>]
-
-parameters:
-  -Z  - Zone name
-  -n  - Record name
-
-optional parameters:
-  -z  - Zone ID
-  -r  - Record ID
-  -t  - TTL (Default: 60)
-  -T  - Record type (Default: A)
-  -N  - Nameserver for check (Default: oxygen.ns.hetzner.com)
-
-help:
-  -h  - Show Help 
-
-requirements:
-  curl
-  dig
-  jq
-
-example:
-  .exec: ./dyndns.sh -z 98jFjsd8dh1GHasdf7a8hJG7 -r AHD82h347fGAF1 -n dyn
-  .exec: ./dyndns.sh -Z example.com -n dyn -T AAAA
-
-``` 
-# Additional stuff
-## Get all Zones
-If you want to get all zones in your account and check the desired zone ID.
-```
+# Replace <your-hetzner-dns-api-token> with your data
 curl "https://dns.hetzner.com/api/v1/zones" -H \
-'Auth-API-Token: ${apitoken}' | jq
+'Auth-API-Token: <your-hetzner-dns-api-token>' | jq
 ```
-## Get a record ID
+
+### Get a record ID
+
 If you want to get a record ID manually you may use the following curl command.
+
 ```
+# Replace <zone_id>, <your-hetzner-dns-api-token>, <record_type>, <record_name> with your data
 curl -s --location \
-    --request GET 'https://dns.hetzner.com/api/v1/records?zone_id='${zone_id} \
-    --header 'Auth-API-Token: '${apitoken} | \
-    jq --raw-output '.records[] | select(.type == "'${record_type}'") | select(.name == "'{record_name}'") | .id'
+    --request GET 'https://dns.hetzner.com/api/v1/records?zone_id=<zone_id>' \
+    --header 'Auth-API-Token: <your-hetzner-dns-api-token>' | \
+    jq --raw-output '.records[] | select(.type == "'<record_type>'") | select(.name == "'<record_name>'") | .id'
 ```
-## Add Record manually
-Use the previously obtained zone ID to create a dns record. 
-In the output you get the record ID. This is needed for the script and should therefore be noted.
+
+### Multiple Domains/Subdomains/Types
+
+You can update multiple domains/subdomains by either running multiple containers with different environment variables or by setting up CNAMES in the DNS zone via Hetzner DNS-API and point them to the A/AAAA record you update.
+
+If you want to update IPv4 and IPv6, you have run multiple containers with different environment variables.
+
+## Build
+
+You can build the image yourself.
+
+```bash
+docker build -t baumerdev/hetzner-dyndns .
 ```
-curl -X "POST" "https://dns.hetzner.com/api/v1/records" \
-     -H 'Content-Type: application/json' \
-     -H 'Auth-API-Token: ${apitoken}' \
-     -d $'{
-  "value": "${yourpublicip}",
-  "ttl": 60,
-  "type": "A",
-  "name": "dyn",
-  "zone_id": "${zoneID}"
-}'
-```
+
+## Original script
+
+This is a fork of the original repository [FarrowStrange/hetzner-api-dyndns](https://github.com/FarrowStrange/hetzner-api-dyndns)
+
+Apart from modifications for Docker, the following changes have been made:
+
+  * It contains some pull requests that have yet not been merged into the original repository.
+  * Some parameter are now mandatory.
+  * It compares the current IP with the IP of the DNS record before calling the API.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
